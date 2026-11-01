@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&display=swap">
 <style>
-/* Layout: one narrow phone column — month header, "left to spend" ring, category bars, spending log; floating add button opens bottom sheets. */
+/* Layout: one narrow phone column — pay-period header, "left to spend" ring, category bars, spending log; floating add button opens bottom sheets. */
 :root{
   --bg:#FBF6F7; --surface:#FFFFFF; --ink:#2B1F2A; --muted:#86727F; --line:#EFE3E7;
   --rose:#D9677F; --rose-soft:#F8E1E6; --sage:#6F9A6C; --danger:#C2413B;
@@ -38,7 +38,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .month{display:flex;align-items:center;gap:4px}
-.month h1{font-size:1.35rem;margin:0;min-width:9.5ch;text-align:center;text-wrap:balance}
+.month h1{font-size:1.3rem;margin:0;min-width:11ch;text-align:center;text-wrap:balance}
 .icon-btn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
 .icon-btn:active{background:var(--rose-soft)}
 .icon-btn svg{width:22px;height:22px}
@@ -117,9 +117,9 @@ hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
 <div class="wrap">
   <header>
     <div class="month">
-      <button class="icon-btn" id="prev" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="icon-btn" id="prev" aria-label="Previous pay period"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
       <h1 id="monthName"></h1>
-      <button class="icon-btn" id="next" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="icon-btn" id="next" aria-label="Next pay period"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></button>
     </div>
     <button class="icon-btn" id="openSettings" aria-label="Budget settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
   </header>
@@ -135,9 +135,9 @@ hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
   </section>
 
   <section class="trend">
-    <h2>Last 6 months</h2>
+    <h2>Last 6 pay periods</h2>
     <svg id="trend" viewBox="0 0 340 180" role="img"></svg>
-    <p class="hint"><span class="key"></span> Spending each month &nbsp; <span class="key line"></span> Income</p>
+    <p class="hint"><span class="key"></span> Spending per pay period &nbsp; <span class="key line"></span> Income</p>
   </section>
 
   <div class="banner" id="exBanner" hidden>
@@ -174,15 +174,19 @@ hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
 
 <dialog class="sheet" id="setSheet">
   <div class="grab"></div>
-  <h2>Monthly budget</h2>
+  <h2>Budget per pay period</h2>
   <form id="setForm" novalidate>
     <div class="row">
-      <div class="field"><label class="label" for="setIncome">Monthly income</label><input id="setIncome" inputmode="decimal"></div>
+      <div class="field"><label class="label" for="setIncome">Income per pay period</label><input id="setIncome" inputmode="decimal"></div>
       <div class="field" style="flex:.7"><label class="label" for="setCur">Currency</label>
         <select id="setCur"></select></div>
     </div>
+    <div class="field"><label class="label" for="setAnchor">A recent payday</label><input id="setAnchor" type="date">
+      <p class="hint">Pay periods start on this day and repeat from there.</p></div>
+    <div class="field"><label class="label" for="setLen">Days in each pay period</label><input id="setLen" type="number" inputmode="numeric" min="1" max="62" step="1">
+      <p class="hint">14 for every two weeks, 7 for weekly, 28 for every four weeks.</p></div>
     <div class="field">
-      <span class="label">Categories &amp; monthly limits</span>
+      <span class="label">Categories &amp; limits per pay period</span>
       <div id="setCats" class="cats" style="gap:8px"></div>
       <button type="button" class="btn ghost" id="addCat">Add a category</button>
     </div>
@@ -210,6 +214,13 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const today = isoDay(new Date());
+// Pay periods are S.len-day blocks (14 by default) counted from a payday (S.anchor). Day math in UTC so DST can't shift a day.
+const dayNum = iso => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 864e5;
+const addDays = (iso, n) => new Date((dayNum(iso) + n) * 864e5).toISOString().slice(0, 10);
+const periodOf = (iso, anchor = S.anchor, len = S.len) => addDays(anchor, Math.floor((dayNum(iso) - dayNum(anchor)) / len) * len);
+const shortDay = iso => new Date(iso + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+console.assert(periodOf('2026-10-31', '2026-11-01', 14) === '2026-10-18' && periodOf('2026-11-14', '2026-11-01', 14) === '2026-11-01' && periodOf('2026-11-10', '2026-11-01', 7) === '2026-11-08'
+  && periodOf('2026-11-15', '2026-11-01', 14) === '2026-11-15' && addDays('2026-03-07', 2) === '2026-03-09', 'periodOf self-check');
 
 // Money is kept in whole cents so totals never drift.
 function parseAmt(s, allowZero) {
@@ -225,19 +236,18 @@ console.assert(parseAmt('12,50') === 1250 && parseAmt('1,200.50') === 120050 && 
   && parseAmt('0') === null && parseAmt('', true) === 0 && parseAmt('abc', true) === null, 'parseAmt self-check');
 
 function defaults() {
-  const cats = [['Rent & bills',120000],['Groceries',40000],['Eating out',20000],['Transport',15000],
-                ['Shopping',25000],['Self-care',10000],['Fun & dates',15000],['Savings',50000]]
+  const cats = [['Rent & bills',60000],['Groceries',20000],['Eating out',10000],['Transport',7500],
+                ['Shopping',12500],['Self-care',5000],['Fun & dates',7500],['Savings',25000]]
     .map(([name, budget], i) => ({ id: uid(), name, budget, color: COLORS[i] }));
-  const ym = today.slice(0, 7), d = Math.max(1, Math.min(+today.slice(8), 28));
-  const day = n => `${ym}-${pad(Math.max(1, d - n))}`;
-  const ex = [[0,120000,'November rent',5],[1,6420,'Weekly shop',3],[2,1850,'Brunch',1],[3,2500,'Metro card',4],
-              [5,3200,'Nails',2],[1,2875,'Farmers market',0],[6,4000,'Cinema night',1],[7,50000,'Moved to savings',5]];
-  return { currency: 'USD', income: 300000, cats,
+  const day = n => addDays(today, -n);
+  const ex = [[0,60000,'Rent share',5],[1,6420,'Weekly shop',3],[2,1850,'Brunch',1],[3,2500,'Metro card',4],
+              [5,3200,'Nails',2],[1,2875,'Farmers market',0],[6,4000,'Cinema night',1],[7,25000,'Moved to savings',5]];
+  return { currency: 'USD', income: 150000, anchor: addDays(today, -6), len: 14, cats,
     tx: ex.map(([c, amt, note, n]) => ({ id: uid(), cat: cats[c].id, amt, note, date: day(n), ex: true })) };
 }
 
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.cats) && Array.isArray(s.tx)) return s; } catch {}
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.cats) && Array.isArray(s.tx)) return { anchor: today, len: 14, ...s }; } catch {}
   return defaults();
 }
 let S = load();
@@ -246,7 +256,7 @@ function save() {
   catch { toast("Couldn't save on this device. Copy a backup from settings."); }
 }
 
-let cur = today.slice(0, 7);
+let cur = periodOf(today);
 const fmt = c => { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: S.currency }).format(c / 100); } catch { return (c / 100).toFixed(2); } };
 const catOf = id => S.cats.find(c => c.id === id) || { name: 'Uncategorized', color: '#9A8C94' };
 
@@ -256,9 +266,9 @@ function toast(msg) {
 }
 
 function render() {
-  const [y, m] = cur.split('-').map(Number);
-  $('monthName').textContent = new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  const txs = S.tx.filter(t => t.date.startsWith(cur)).sort((a, b) => b.date.localeCompare(a.date));
+  const end = addDays(cur, S.len), inP = (d, a, b) => d >= a && d < b;
+  $('monthName').textContent = `${shortDay(cur)} – ${shortDay(addDays(cur, S.len - 1))}`;
+  const txs = S.tx.filter(t => inP(t.date, cur, end)).sort((a, b) => b.date.localeCompare(a.date));
   const by = {}; let spent = 0;
   for (const t of txs) { by[t.cat] = (by[t.cat] || 0) + t.amt; spent += t.amt; }
   const left = S.income - spent;
@@ -266,8 +276,8 @@ function render() {
   $('left').textContent = fmt(left);
   $('left').classList.toggle('neg', left < 0);
   $('sub').textContent = `${fmt(spent)} spent of ${fmt(S.income)}`;
-  const daysIn = new Date(y, m, 0).getDate(), daysLeft = daysIn - +today.slice(8) + 1;
-  $('daily').hidden = !(cur === today.slice(0, 7) && left > 0);
+  const daysLeft = dayNum(end) - dayNum(today);
+  $('daily').hidden = !(cur === periodOf(today) && left > 0);
   $('daily').textContent = `About ${fmt(Math.floor(left / daysLeft))} a day for ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`;
 
   // Ring: each category's share of income, in its own color.
@@ -297,9 +307,9 @@ function render() {
       ${note ? `<span class="note">${note}</span>` : ''}</div>`;
   }).join('');
 
-  // Bar chart: total spending for the 6 months ending at the shown month, against income.
-  const months = [...Array(6)].map((_, i) => { const d = new Date(y, m - 6 + i, 1); return { key: `${d.getFullYear()}-${pad(d.getMonth() + 1)}`, d }; });
-  for (const mo of months) mo.v = S.tx.reduce((a, t) => t.date.startsWith(mo.key) ? a + t.amt : a, 0);
+  // Bar chart: total spending for the 6 pay periods ending at the shown one, against income.
+  const months = [...Array(6)].map((_, i) => ({ key: addDays(cur, (i - 5) * S.len) }));
+  for (const mo of months) { const e = addDays(mo.key, S.len); mo.v = S.tx.reduce((a, t) => inP(t.date, mo.key, e) ? a + t.amt : a, 0); }
   const top = Math.max(S.income, ...months.map(mo => mo.v), 1), H = 120, Y0 = 145, slot = 340 / 6;
   const short = c => { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: S.currency, notation: 'compact', maximumFractionDigits: 1 }).format(c / 100); } catch { return Math.round(c / 100); } };
   const incY = Y0 - S.income / top * H;
@@ -308,13 +318,13 @@ function render() {
     const fill = S.income && mo.v > S.income ? 'var(--danger)' : 'var(--rose)';
     return `<rect x="${x}" y="${Y0 - h}" width="${w}" height="${h}" rx="6" fill="${fill}" opacity="${isCur ? 1 : .45}"/>
       ${mo.v ? `<text x="${x + w / 2}" y="${Y0 - h - 6}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${short(mo.v)}</text>` : ''}
-      <text x="${x + w / 2}" y="${Y0 + 18}" text-anchor="middle" font-size="11.5" font-weight="${isCur ? 700 : 400}" fill="${isCur ? 'var(--ink)' : 'var(--muted)'}">${mo.d.toLocaleDateString(undefined, { month: 'short' })}</text>`;
+      <text x="${x + w / 2}" y="${Y0 + 18}" text-anchor="middle" font-size="11.5" font-weight="${isCur ? 700 : 400}" fill="${isCur ? 'var(--ink)' : 'var(--muted)'}">${shortDay(mo.key)}</text>`;
   }).join('') + (S.income ? `<line x1="0" x2="340" y1="${incY}" y2="${incY}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 5"/>` : '');
-  $('trend').setAttribute('aria-label', 'Spending by month: ' + months.map(mo => `${mo.d.toLocaleDateString(undefined, { month: 'long' })} ${fmt(mo.v)}`).join(', '));
+  $('trend').setAttribute('aria-label', 'Spending per pay period: ' + months.map(mo => `from ${shortDay(mo.key)} ${fmt(mo.v)}`).join(', '));
 
   $('exBanner').hidden = !S.tx.some(t => t.ex);
 
-  if (!txs.length) { $('txs').innerHTML = `<p class="empty">Nothing spent this month yet.<br>Tap <b>Add spending</b> to log your first one.</p>`; return; }
+  if (!txs.length) { $('txs').innerHTML = `<p class="empty">Nothing spent this pay period yet.<br>Tap <b>Add spending</b> to log your first one.</p>`; return; }
   const days = {};
   for (const t of txs) (days[t.date] ||= []).push(t);
   $('txs').innerHTML = Object.entries(days).map(([d, list]) => {
@@ -335,7 +345,7 @@ function openTx(t) {
   $('txTitle').textContent = t ? 'Edit spending' : 'Add spending';
   $('txAmt').value = t ? (t.amt / 100).toFixed(2) : '';
   $('txNote').value = t ? t.note : '';
-  $('txDate').value = t ? t.date : (cur === today.slice(0, 7) ? today : cur + '-01');
+  $('txDate').value = t ? t.date : (cur === periodOf(today) ? today : cur);
   $('txCats').innerHTML = S.cats.map((c, i) => `<input type="radio" name="txCat" id="tc${i}" value="${c.id}"><label for="tc${i}"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</label>`).join('');
   const sel = document.querySelector(`#txCats input[value="${t ? t.cat : ''}"]`);
   if (sel) sel.checked = true;
@@ -355,7 +365,7 @@ $('txForm').onsubmit = e => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return $('txErr').textContent = 'Pick a date.';
   const entry = { id: editing ? editing.id : uid(), amt, cat, note: $('txNote').value.trim(), date };
   S.tx = editing ? S.tx.map(t => t.id === editing.id ? entry : t) : [...S.tx, entry];
-  cur = date.slice(0, 7);
+  cur = periodOf(date);
   save(); render(); $('txSheet').close(); toast(editing ? 'Saved' : `Added ${fmt(amt)}`);
 };
 $('txDelete').onclick = () => {
@@ -370,7 +380,7 @@ let draft;
 function catRow(c, i) {
   return `<div class="catedit" data-i="${i}">
     <input value="${esc(c.name)}" aria-label="Category name" data-k="name" maxlength="30">
-    <input value="${c.budget ? (c.budget / 100).toFixed(2).replace(/\.00$/, '') : ''}" placeholder="Limit" inputmode="decimal" aria-label="Monthly limit for ${esc(c.name)}" data-k="budget">
+    <input value="${c.budget ? (c.budget / 100).toFixed(2).replace(/\.00$/, '') : ''}" placeholder="Limit" inputmode="decimal" aria-label="Limit per pay period for ${esc(c.name)}" data-k="budget">
     <button type="button" class="icon-btn" data-del aria-label="Remove ${esc(c.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>`;
 }
 function drawCats() { $('setCats').innerHTML = draft.map(catRow).join(''); }
@@ -383,6 +393,7 @@ function readCats() {
 $('openSettings').onclick = () => {
   draft = S.cats.map(c => ({ ...c }));
   $('setIncome').value = (S.income / 100).toFixed(2).replace(/\.00$/, '');
+  $('setAnchor').value = S.anchor; $('setLen').value = S.len;
   $('setCur').innerHTML = [...new Set([S.currency, ...CURRENCIES])].map(c => `<option${c === S.currency ? ' selected' : ''}>${c}</option>`).join('');
   $('setErr').textContent = ''; $('restoreText').value = '';
   $('erase').textContent = 'Erase everything'; delete $('erase').dataset.armed;
@@ -398,7 +409,11 @@ $('setCats').onclick = e => { if (e.target.closest('[data-del]')) { readCats(); 
 $('setForm').onsubmit = e => {
   e.preventDefault(); readCats();
   const income = parseAmt($('setIncome').value, true);
-  if (income === null) return $('setErr').textContent = 'Income should be a number, like 3000.';
+  if (income === null) return $('setErr').textContent = 'Income should be a number, like 1500.';
+  const anchor = $('setAnchor').value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor)) return $('setErr').textContent = 'Pick the date of a recent payday.';
+  const len = Number($('setLen').value);
+  if (!Number.isInteger(len) || len < 1 || len > 62) return $('setErr').textContent = 'Days in each pay period should be a whole number from 1 to 62.';
   for (const c of draft) {
     c.name = c.name.trim();
     if (!c.name) return $('setErr').textContent = 'Every category needs a name.';
@@ -407,8 +422,8 @@ $('setForm').onsubmit = e => {
     c.budget = b; delete c.budgetRaw;
   }
   if (!draft.length) return $('setErr').textContent = 'Keep at least one category.';
-  S.income = income; S.currency = $('setCur').value; S.cats = draft;
-  save(); render(); $('setSheet').close(); toast('Budget saved');
+  S.income = income; S.currency = $('setCur').value; S.cats = draft; S.anchor = anchor; S.len = len;
+  cur = periodOf(today); save(); render(); $('setSheet').close(); toast('Budget saved');
 };
 $('copyBackup').onclick = () => {
   const text = JSON.stringify(S);
@@ -420,17 +435,17 @@ $('restore').onclick = () => {
   try {
     const s = JSON.parse($('restoreText').value);
     if (!Array.isArray(s.cats) || !Array.isArray(s.tx) || typeof s.income !== 'number') throw 0;
-    S = s; save(); render(); $('setSheet').close(); toast('Backup restored');
+    S = { anchor: today, len: 14, ...s }; cur = periodOf(today); save(); render(); $('setSheet').close(); toast('Backup restored');
   } catch { $('setErr').textContent = "That backup couldn't be read. Paste the whole text you copied."; }
 };
 $('erase').onclick = () => {
   const b = $('erase');
   if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = 'Tap again to erase all spending'; return; }
-  S = { ...defaults(), tx: [] }; save(); render(); $('setSheet').close(); toast('Started fresh');
+  S = { ...defaults(), tx: [] }; cur = periodOf(today); save(); render(); $('setSheet').close(); toast('Started fresh');
 };
 
 $('clearEx').onclick = () => { S.tx = S.tx.filter(t => !t.ex); save(); render(); toast('Examples cleared'); };
-const shift = n => { const [y, m] = cur.split('-').map(Number), d = new Date(y, m - 1 + n, 1); cur = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; render(); };
+const shift = n => { cur = addDays(cur, n * S.len); render(); };
 $('prev').onclick = () => shift(-1);
 $('next').onclick = () => shift(1);
 // Tapping the dimmed area closes a sheet.
